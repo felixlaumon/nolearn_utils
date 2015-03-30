@@ -7,9 +7,11 @@ from nolearn_utils.iterators import BaseBatchIterator
 def X():
     return np.random.rand(1000, 3, 48, 48)
 
+
 @pytest.fixture
 def y():
     return np.random.rand(1000)
+
 
 def test_base_batch_iterator(X, y):
     iterator = BaseBatchIterator(batch_size=128)
@@ -21,8 +23,10 @@ def test_base_batch_iterator(X, y):
     assert batches[-1][0].shape[0] == 104
     assert batches[-1][1].shape[0] == 104
 
+
 def test_shuffle_batch_iterator(X, y):
     from nolearn_utils.iterators import ShuffleBatchIteratorMixin
+
     class Iterator(ShuffleBatchIteratorMixin, BaseBatchIterator):
         pass
     iterator = Iterator(batch_size=128)
@@ -30,4 +34,3 @@ def test_shuffle_batch_iterator(X, y):
     Xb, yb = iter(iterator(X, y)).next()
     assert np.all(Xb != X[:128]) == True
     assert np.all(yb != y[:128]) == True
-

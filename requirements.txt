@@ -1,0 +1,3 @@
+Theano==0.7
+git+https://github.com/benanne/Lasagne.git@cd5e396f87#egg=Lasagne
+scikit-image==0.11.2

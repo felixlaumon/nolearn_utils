@@ -12,7 +12,8 @@ except IOError:
     README = CHANGES = ''
 
 install_requires = [
-    'nolearn'
+    'nolearn',
+    'Lasagne'
     ]
 
 tests_require = [

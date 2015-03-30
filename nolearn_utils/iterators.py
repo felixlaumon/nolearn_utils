@@ -6,6 +6,9 @@ from time import time
 
 import numpy as np
 from numpy.random import choice
+from skimage.io import imread
+from skimage.color import gray2rgb
+from skimage.transform import resize
 from skimage.transform import SimilarityTransform
 from skimage.transform import AffineTransform
 from skimage.transform import warp
@@ -35,7 +38,8 @@ class BaseBatchIterator(object):
             else:
                 yb = None
             yield self.transform(Xb, yb)
-            write_temp_log('Minibatch %i / %i (%.2fs)' % (i + 1, n_iterations, time() - t0))
+            write_temp_log('Minibatch %i / %i (%.2fs)'
+                           % (i + 1, n_iterations, time() - t0))
         write_temp_log('')  # Remove last log
 
     def transform(self, Xb, yb):
@@ -43,7 +47,9 @@ class BaseBatchIterator(object):
 
 
 class ShuffleBatchIteratorMixin(object):
-    """From https://github.com/dnouri/nolearn/issues/27#issuecomment-71175381"""
+    """
+    From https://github.com/dnouri/nolearn/issues/27#issuecomment-71175381
+    """
     def __iter__(self):
         self.X, self.y = shuffle(self.X, self.y)
         for res in super(ShuffleBatchIteratorMixin, self).__iter__():
@@ -52,9 +58,11 @@ class ShuffleBatchIteratorMixin(object):
 
 class AffineTransformBatchIteratorMixin(object):
     def __init__(self, affine_p,
-                 affine_scale_choices, affine_translation_choices, affine_rotation_choices,
+                 affine_scale_choices, affine_translation_choices,
+                 affine_rotation_choices,
                  *args, **kwargs):
-        super(AffineTransformBatchIteratorMixin, self).__init__(*args, **kwargs)
+        super(AffineTransformBatchIteratorMixin,
+              self).__init__(*args, **kwargs)
         self.affine_p = affine_p
         self.affine_scale_choices = affine_scale_choices
         self.affine_translation_choices = affine_translation_choices
@@ -66,26 +74,25 @@ class AffineTransformBatchIteratorMixin(object):
             print('Scale choices', self.affine_scale_choices)
             print('Translation choices', self.affine_translation_choices)
 
-
     def transform(self, Xb, yb):
-        Xb, yb = super(AffineTransformBatchIteratorMixin, self).transform(Xb, yb)
+        Xb, yb = super(AffineTransformBatchIteratorMixin,
+                       self).transform(Xb, yb)
         # Skip if affine_p is 0. Setting affine_p may be useful for quikcly
         # disabling affine transformation
         if self.affine_p == 0:
             return Xb, yb
-        # TODO copying the array to prevent permuating the original content
-        # Otherwise image quality will gradually decrease because of down-
-        # sampling due to scaling. However this will consume more memory and
-        # is slower
-        Xb = Xb.copy()
         idx = get_random_idx(Xb, self.affine_p)
-        Xb[idx] = np.asarray([
-            im_affine_transform(img,
-                                scale=choice(self.affine_scale_choices),
-                                translation_y=choice(self.affine_translation_choices),
-                                translation_x=choice(self.affine_translation_choices),
-                                rotation=choice(self.affine_rotation_choices))
-            for img in Xb[idx]])
+        Xb_transformed = np.empty_like(Xb)
+        for i, img in enumerate(Xb):
+            scale = choice(self.affine_scale_choices)
+            rotation = choice(self.affine_rotation_choices)
+            translation_y = choice(self.affine_translation_choices)
+            translation_x = choice(self.affine_translation_choices)
+            img_transformed = im_affine_transform(img, scale=scale,
+                                                  rotation=rotation,
+                                                  translation_y=translation_y,
+                                                  translation_x=translation_x)
+            Xb_transformed[i] = img_transformed
         return Xb, yb
 
 
@@ -97,19 +104,62 @@ class RandomCropBatchIteratorMixin(object):
     def transform(self, Xb, yb):
         Xb, yb = super(RandomCropBatchIteratorMixin, self).transform(Xb, yb)
         batch_size = min(self.batch_size, Xb.shape[0])
-        Xb_transformed = np.empty((batch_size, self.crop_size[0], self.crop_size[1], Xb.shape[3]))
+        img_h = Xb.shape[2]
+        img_w = Xb.shape[3]
+        Xb_transformed = np.empty((batch_size, Xb.shape[1],
+                                   self.crop_size[0], self.crop_size[1]))
         # TODO vectorize implementation if possible
         for i in range(batch_size):
-            start_0 = np.random.choice(Xb.shape[1] - self.crop_size[0])
+            start_0 = np.random.choice(img_h - self.crop_size[0])
             end_0 = start_0 + self.crop_size[0]
-            start_1 = np.random.choice(Xb.shape[2] - self.crop_size[1])
+            start_1 = np.random.choice(img_w - self.crop_size[1])
             end_1 = start_1 + self.crop_size[1]
-            Xb_transformed[i] = Xb[i][start_0:end_0, start_1:end_1, :]
+            Xb_transformed[i] = Xb[i][:, start_0:end_0, start_1:end_1]
         return Xb_transformed, yb
 
 
 class ReadImageBatchIteratorMixin(object):
-    def __init__(self, read_image_prefix_path=''):
+    def __init__(self, read_image_size, read_image_prefix_path='',
+                 read_image_as_gray=False, read_image_as_bc01=True,
+                 read_image_as_float32=True,
+                 *args, **kwargs):
+        super(ReadImageBatchIteratorMixin, self).__init__(*args, **kwargs)
+        self.read_image_size = read_image_size
+        self.read_image_prefix_path = read_image_prefix_path
+        self.read_image_as_gray = read_image_as_gray
+        self.read_image_as_bc01 = read_image_as_bc01
+        self.read_image_as_float32 = read_image_as_float32
+
+    def transform(self, Xb, yb):
+        Xb, yb = super(ReadImageBatchIteratorMixin, self).transform(Xb, yb)
+
+        batch_size = min(Xb.shape[0], self.batch_size)
+        num_channels = 1 if self.read_image_as_gray is True else 3
+        h = self.read_image_size[0]
+        w = self.read_image_size[1]
+
+        imgs = np.empty((batch_size, num_channels, h, w), dtype=np.float32)
+        for i, path in enumerate(Xb):
+            img = imread(self.read_image_prefix_path + path,
+                         as_gray=self.read_image_as_gray)
+            img = resize(img, (h, w))
+
+            # Convert greyscale image to RGB for consistency
+            if len(img.shape) == 2 and self.read_image_as_gray is False:
+                img = gray2rgb(img)
+
+            # Transpose to bc01
+            if self.read_image_as_bc01 and self.read_image_as_gray is False:
+                img = img.transpose(2, 0, 1)
+            elif self.read_image_as_bc01 and self.read_image_as_gray is True:
+                img = np.expand_dims(img, axis=0)
+
+            imgs[i] = img
+        return imgs, yb
+
+
+class MeanSubtractBatchiteratorMixin(object):
+    def __init__(self, mean):
         pass
 
     def transform(self, Xb, yb):
@@ -120,8 +170,10 @@ def shuffle(*arrays):
     p = np.random.permutation(len(arrays[0]))
     return [array[p] for array in arrays]
 
+
 def im_affine_transform(img, scale, rotation, translation_y, translation_x):
-    # Normalize so that the param acts more like im_rotate, im_translate etc.
+    img = img.transpose(1, 2, 0)
+    # Normalize so that the param acts more like im_rotate, im_translate etc
     scale = 1 / scale
     translation_x = - translation_x
 
@@ -131,18 +183,21 @@ def im_affine_transform(img, scale, rotation, translation_y, translation_x):
     tform_uncenter = SimilarityTransform(translation=center_shift)
 
     rotation = np.deg2rad(rotation)
-    tform = AffineTransform(scale=(scale, scale), rotation=rotation, translation=(translation_y, translation_x))
+    tform = AffineTransform(scale=(scale, scale), rotation=rotation,
+                            translation=(translation_y, translation_x))
     tform = tform_center + tform + tform_uncenter
 
     warped_img = warp(img, tform)
+    warped_img = warped_img.transpose(2, 0, 1)
     return warped_img
+
 
 def get_random_idx(arr, p):
     n = arr.shape[0]
     idx = choice(n, int(n * p), replace=False)
     return idx
 
+
 def write_temp_log(str):
     sys.stdout.write('\r%s' % str)
     sys.stdout.flush()
-
