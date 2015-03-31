@@ -103,6 +103,7 @@ class RandomCropBatchIteratorMixin(object):
 
     def transform(self, Xb, yb):
         Xb, yb = super(RandomCropBatchIteratorMixin, self).transform(Xb, yb)
+        # TODO raise exception if Xb size is smaller than crop size
         batch_size = min(self.batch_size, Xb.shape[0])
         img_h = Xb.shape[2]
         img_w = Xb.shape[3]
@@ -159,11 +160,14 @@ class ReadImageBatchIteratorMixin(object):
 
 
 class MeanSubtractBatchiteratorMixin(object):
-    def __init__(self, mean):
-        pass
+    def __init__(self, mean, *args, **kwargs):
+        super(MeanSubtractBatchiteratorMixin, self).__init__(*args, **kwargs)
+        self.mean = mean
 
     def transform(self, Xb, yb):
-        pass
+        Xb, yb = super(MeanSubtractBatchiteratorMixin, self).transform(Xb, yb)
+        Xb = Xb - self.mean
+        return Xb, yb
 
 
 def shuffle(*arrays):

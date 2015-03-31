@@ -1,2 +1,2 @@
 [run]
-omit = lasagne/tests/*
+omit = nolearn_utils/tests/*
