@@ -1,4 +1,5 @@
 import numpy as np
+import cPickle as pickle
 
 
 class EarlyStopping(object):
@@ -47,6 +48,44 @@ class StepDecay(object):
         if epoch >= 0:
             new_value = float32(self.ls[epoch - 1])
             getattr(net, self.name).set_value(new_value)
+
+
+class SaveTrainingHistory(object):
+    def __init__(self, path, verbose=0):
+        self.path = path
+        self.verbose = verbose
+
+    def __call__(self, nn, train_history):
+        with open(self.path, 'wb') as f:
+            pickle.dump(train_history, f, -1)
+
+
+class PlotTrainingHistory(object):
+    def __init__(self, path, log_scale=False):
+        self.path = path
+        self.log_scale = log_scale
+
+    def __call__(self, nn, train_history):
+        valid_accuracy = np.asarray([history['valid_accuracy'] for history in train_history])
+        train_loss = np.asarray([history['train_loss'] for history in train_history])
+        valid_loss = np.asarray([history['valid_loss'] for history in train_history])
+
+        plt.figure(figsize=(20, 8))
+
+        plt.subplot(1, 2, 1)
+        plt.title('Loss over time')
+        plt.plot(train_loss, label='Training loss')
+        plt.plot(valid_loss, label='Validation loss')
+        if self.log_scale is True:
+            plt.yscale('log')
+        plt.legend()
+
+        plt.subplot(1, 2, 2)
+        plt.title('Accuracy against training epoch')
+        plt.plot(valid_accuracy, label='Validation accuracy')
+        plt.legend()
+
+        plt.savefig(self.path)
 
 
 def float32(x):
