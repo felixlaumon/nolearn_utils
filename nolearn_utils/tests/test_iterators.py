@@ -5,7 +5,7 @@ from skimage.data import lena as get_lena
 from skimage.io import imsave
 from tempfile import mkstemp
 
-from nolearn_utils.iterators import BaseBatchIterator
+from nolearn_utils.iterators import BaseBatchIterator, make_iterator
 
 
 @pytest.fixture
@@ -76,6 +76,15 @@ def test_random_crop_batch_iterator(X, y):
         pass
 
     iterator = Iterator(batch_size=128, crop_size=(20, 20))
+
+    for Xb, yb in iterator(X, y):
+        pass
+
+
+def test_random_flip_batch_iterator(X, y):
+    from nolearn_utils.iterators import RandomFlipBatchIteratorMixin
+    Iterator = make_iterator('Iterator', [RandomFlipBatchIteratorMixin])
+    iterator = Iterator(batch_size=128, flip_horizontal_p=0.5, flip_vertical_p=0.5)
 
     for Xb, yb in iterator(X, y):
         pass

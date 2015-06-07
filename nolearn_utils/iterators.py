@@ -2,6 +2,7 @@ from __future__ import division
 from __future__ import print_function
 
 import sys
+import os
 from time import time
 
 import numpy as np
@@ -12,25 +13,23 @@ from skimage.transform import resize
 from skimage.transform import SimilarityTransform
 from skimage.transform import AffineTransform
 from skimage.transform import warp
+from skimage.filters import rank
+from skimage.morphology import disk
 
 
 class BaseBatchIterator(object):
-    def __init__(self, batch_size, *args, **kwargs):
+    def __init__(self, batch_size, verbose=False):
         self.batch_size = batch_size
-        self.verbose = kwargs.get('verbose', False)
+        self.verbose = False
 
-    def __call__(self, X, y=None, verbose=False):
-        # TODO sanity check if X and y has same length
-        self.X = X
-        self.y = y
+    def __call__(self, X, y=None):
+        self.X, self.y = X, y
         return self
 
     def __iter__(self):
         n_samples = self.X.shape[0]
         bs = self.batch_size
-        n_iterations = (n_samples + bs - 1) // bs
-        for i in range(n_iterations):
-            t0 = time()
+        for i in range((n_samples + bs - 1) // bs):
             sl = slice(i * bs, (i + 1) * bs)
             Xb = self.X[sl]
             if self.y is not None:
@@ -38,12 +37,16 @@ class BaseBatchIterator(object):
             else:
                 yb = None
             yield self.transform(Xb, yb)
-            write_temp_log('Minibatch %i / %i (%.2fs)'
-                           % (i + 1, n_iterations, time() - t0))
-        write_temp_log('')  # Remove last log
 
     def transform(self, Xb, yb):
         return Xb, yb
+
+    def __getstate__(self):
+        state = dict(self.__dict__)
+        for attr in ('X', 'y',):
+            if attr in state:
+                del state[attr]
+        return state
 
 
 class ShuffleBatchIteratorMixin(object):
@@ -119,6 +122,27 @@ class RandomCropBatchIteratorMixin(object):
         return Xb_transformed, yb
 
 
+class RandomFlipBatchIteratorMixin(object):
+    def __init__(self, flip_horizontal_p=0.5, flip_vertical_p=0.5, *args, **kwargs):
+        super(RandomFlipBatchIteratorMixin, self).__init__(*args, **kwargs)
+        self.flip_horizontal_p = flip_horizontal_p
+        self.flip_vertical_p = flip_vertical_p
+
+    def transform(self, Xb, yb):
+        Xb, yb = super(RandomFlipBatchIteratorMixin, self).transform(Xb, yb)
+        Xb_flipped = Xb.copy()
+
+        if self.flip_horizontal_p > 0:
+            horizontal_flip_idx = get_random_idx(Xb, self.flip_horizontal_p)
+            Xb_flipped[horizontal_flip_idx] = Xb_flipped[horizontal_flip_idx, :, :, ::-1]
+
+        if self.flip_vertical_p > 0:
+            vertical_flip_idx = get_random_idx(Xb, self.flip_vertical_p)
+            Xb_flipped[vertical_flip_idx] = Xb_flipped[vertical_flip_idx, :, ::-1, :]
+
+        return Xb_flipped, yb
+
+
 class ReadImageBatchIteratorMixin(object):
     def __init__(self, read_image_size, read_image_prefix_path='',
                  read_image_as_gray=False, read_image_as_bc01=True,
@@ -141,11 +165,12 @@ class ReadImageBatchIteratorMixin(object):
 
         imgs = np.empty((batch_size, num_channels, h, w), dtype=np.float32)
         for i, path in enumerate(Xb):
-            img = imread(self.read_image_prefix_path + path,
-                         as_gray=self.read_image_as_gray)
+            img_fname = os.path.join(self.read_image_prefix_path, path)
+            img = imread(img_fname,
+                         as_grey=self.read_image_as_gray)
             img = resize(img, (h, w))
 
-            # Convert greyscale image to RGB for consistency
+            # When reading image as color image, convert grayscale image to RGB for consistency
             if len(img.shape) == 2 and self.read_image_as_gray is False:
                 img = gray2rgb(img)
 
@@ -160,6 +185,9 @@ class ReadImageBatchIteratorMixin(object):
 
 
 class MeanSubtractBatchiteratorMixin(object):
+    """
+    TODO should calculate the mean
+    """
     def __init__(self, mean, *args, **kwargs):
         super(MeanSubtractBatchiteratorMixin, self).__init__(*args, **kwargs)
         self.mean = mean
@@ -168,6 +196,32 @@ class MeanSubtractBatchiteratorMixin(object):
         Xb, yb = super(MeanSubtractBatchiteratorMixin, self).transform(Xb, yb)
         Xb = Xb - self.mean
         return Xb, yb
+
+
+class LCNBatchIteratorMixin(object):
+    """
+    """
+    def __init__(self, lcn_selem=disk(5), *args, **kwargs):
+        super(LCNBatchIteratorMixin, self).__init__(*args, **kwargs)
+        self.lcn_selem = lcn_selem
+
+    def transform(self, Xb, yb):
+        Xb, yb = super(LCNBatchIteratorMixin, self).transform(Xb, yb)
+        if len(Xb.shape) != 4 or Xb.shape[1] != 1:
+            raise ValueError('X must be in shape of (batch_size, 1, height, width) but is %s', Xb.shape)
+        Xb_transformed = np.asarray([local_contrast_normalization(img[0], self.lcn_selem) for img in Xb])
+        Xb_transformed = Xb_transformed[:, np.newaxis, :, :]
+        return Xb_transformed, yb
+
+
+def make_iterator(name, mixin):
+    """
+    Return an Iterator class added with the provided mixin
+    """
+    mixin = [BaseBatchIterator] + mixin
+    # Reverse the order for type()
+    mixin.reverse()
+    return type(name, tuple(mixin), {})
 
 
 def shuffle(*arrays):
@@ -194,6 +248,10 @@ def im_affine_transform(img, scale, rotation, translation_y, translation_x):
     warped_img = warp(img, tform)
     warped_img = warped_img.transpose(2, 0, 1)
     return warped_img
+
+
+def local_contrast_normalization(img, selem=disk(5)):
+    return rank.equalize(img, selem)
 
 
 def get_random_idx(arr, p):
