@@ -1,10 +1,11 @@
 import numpy as np
 import cPickle as pickle
+import matplotlib.pyplot as plt
 
 
 class EarlyStopping(object):
     """From https://github.com/dnouri/kfkd-tutorial"""
-    def __init__(self, patience=100):
+    def __init__(self, patience=50):
         self.patience = patience
         self.best_valid = np.inf
         self.best_valid_epoch = 0
@@ -61,16 +62,17 @@ class SaveTrainingHistory(object):
 
 
 class PlotTrainingHistory(object):
-    def __init__(self, path, log_scale=False):
+    def __init__(self, path, log_scale=False, figsize=(20, 8)):
         self.path = path
         self.log_scale = log_scale
+        self.figsize = figsize
 
     def __call__(self, nn, train_history):
         valid_accuracy = np.asarray([history['valid_accuracy'] for history in train_history])
         train_loss = np.asarray([history['train_loss'] for history in train_history])
         valid_loss = np.asarray([history['valid_loss'] for history in train_history])
 
-        plt.figure(figsize=(20, 8))
+        plt.figure(figsize=self.figsize)
 
         plt.subplot(1, 2, 1)
         plt.title('Loss over time')
@@ -86,6 +88,7 @@ class PlotTrainingHistory(object):
         plt.legend()
 
         plt.savefig(self.path)
+        plt.close()
 
 
 def float32(x):

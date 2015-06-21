@@ -5,6 +5,9 @@ import sys
 import os
 from time import time
 
+import Queue
+import threading
+
 import numpy as np
 from numpy.random import choice
 from skimage.io import imread
@@ -15,6 +18,13 @@ from skimage.transform import AffineTransform
 from skimage.transform import warp
 from skimage.filters import rank
 from skimage.morphology import disk
+from skimage.exposure import equalize_adapthist
+
+from progressbar import (
+    ProgressBar, Bar,
+    Counter, Percentage, RotatingMarker,
+    AdaptiveETA
+)
 
 
 class BaseBatchIterator(object):
@@ -29,7 +39,16 @@ class BaseBatchIterator(object):
     def __iter__(self):
         n_samples = self.X.shape[0]
         bs = self.batch_size
-        for i in range((n_samples + bs - 1) // bs):
+        n_batches = (n_samples + bs - 1) // bs
+        widgets = [
+            Counter(), ' ',
+            Percentage(), ' ',
+            Bar(), ' ',
+            AdaptiveETA()
+        ]
+        pbar = ProgressBar(widgets=widgets, maxval=n_batches).start()
+
+        for i in range(n_batches):
             sl = slice(i * bs, (i + 1) * bs)
             Xb = self.X[sl]
             if self.y is not None:
@@ -37,6 +56,16 @@ class BaseBatchIterator(object):
             else:
                 yb = None
             yield self.transform(Xb, yb)
+            pbar.update(i)
+        pbar.finish()
+
+    @property
+    def n_samples(self):
+        X = self.X
+        if isinstance(X, dict):
+            return len(list(X.values())[0])
+        else:
+            return len(X)
 
     def transform(self, Xb, yb):
         return Xb, yb
@@ -52,6 +81,8 @@ class BaseBatchIterator(object):
 class ShuffleBatchIteratorMixin(object):
     """
     From https://github.com/dnouri/nolearn/issues/27#issuecomment-71175381
+
+    Shuffle the order of samples
     """
     def __iter__(self):
         self.X, self.y = shuffle(self.X, self.y)
@@ -59,7 +90,28 @@ class ShuffleBatchIteratorMixin(object):
             yield res
 
 
+class BufferedBatchIteratorMixin(object):
+    """
+    Create a buffered iterator which the next batch will be generated
+    from a new thread. Help to speed up training if there is significant
+    image preprocessing.
+
+    Should be the last mixin
+    """
+    def __init__(self, buffer_size=2, *args, **kwargs):
+        super(BufferedBatchIteratorMixin, self).__init__(*args, **kwargs)
+        self.buffer_size = buffer_size
+
+    def __iter__(self):
+        gen = super(BufferedBatchIteratorMixin, self).__iter__()
+        return make_buffer_for_iterator(gen, self.buffer_size)
+
+
 class AffineTransformBatchIteratorMixin(object):
+    """
+    Apply affine transform (scale, translate and rotation)
+    with a random chance
+    """
     def __init__(self, affine_p,
                  affine_scale_choices, affine_translation_choices,
                  affine_rotation_choices,
@@ -100,6 +152,9 @@ class AffineTransformBatchIteratorMixin(object):
 
 
 class RandomCropBatchIteratorMixin(object):
+    """
+    Randomly crop the image to the desired size
+    """
     def __init__(self, crop_size, *args, **kwargs):
         super(RandomCropBatchIteratorMixin, self).__init__(*args, **kwargs)
         self.crop_size = crop_size
@@ -123,6 +178,9 @@ class RandomCropBatchIteratorMixin(object):
 
 
 class RandomFlipBatchIteratorMixin(object):
+    """
+    Randomly flip the random horizontally or vertically
+    """
     def __init__(self, flip_horizontal_p=0.5, flip_vertical_p=0.5, *args, **kwargs):
         super(RandomFlipBatchIteratorMixin, self).__init__(*args, **kwargs)
         self.flip_horizontal_p = flip_horizontal_p
@@ -144,6 +202,9 @@ class RandomFlipBatchIteratorMixin(object):
 
 
 class ReadImageBatchIteratorMixin(object):
+    """
+    Read images by file name
+    """
     def __init__(self, read_image_size, read_image_prefix_path='',
                  read_image_as_gray=False, read_image_as_bc01=True,
                  read_image_as_float32=True,
@@ -166,6 +227,8 @@ class ReadImageBatchIteratorMixin(object):
         imgs = np.empty((batch_size, num_channels, h, w), dtype=np.float32)
         for i, path in enumerate(Xb):
             img_fname = os.path.join(self.read_image_prefix_path, path)
+            if self.verbose > 2:
+                print('Reading %s' % img_fname)
             img = imread(img_fname,
                          as_grey=self.read_image_as_gray)
             img = resize(img, (h, w))
@@ -200,6 +263,7 @@ class MeanSubtractBatchiteratorMixin(object):
 
 class LCNBatchIteratorMixin(object):
     """
+    Apply local contrast normalization to images
     """
     def __init__(self, lcn_selem=disk(5), *args, **kwargs):
         super(LCNBatchIteratorMixin, self).__init__(*args, **kwargs)
@@ -214,6 +278,32 @@ class LCNBatchIteratorMixin(object):
         return Xb_transformed, yb
 
 
+class EqualizeAdaptHistBatchIteratorMixin(object):
+    """
+    Apply adaptive histogram equalization
+    http://scikit-image.org/docs/dev/api/skimage.exposure.html#skimage.exposure.equalize_adapthist
+    """
+    def __init__(self, eqadapthist_ntiles_x=8, eqadapthist_ntiles_y=8,
+                 eqadapthist_clip_limit=0.01, eqadapthist_nbins=256, *args, **kwargs):
+        super(EqualizeAdaptHistBatchIteratorMixin, self).__init__(*args, **kwargs)
+        self.eqadapthist_ntiles_x = eqadapthist_ntiles_x
+        self.eqadapthist_ntiles_y = eqadapthist_ntiles_y
+        self.eqadapthist_clip_limit = eqadapthist_clip_limit
+        self.eqadapthist_nbins = eqadapthist_nbins
+
+    def transform(self, Xb, yb):
+        Xb, yb = super(EqualizeAdaptHistBatchIteratorMixin, self).transform(Xb, yb)
+        Xb_transformed = np.asarray([
+            equalize_adapthist(img, ntiles_x=self.eqadapthist_ntiles_x,
+                               ntiles_y=self.eqadapthist_ntiles_y,
+                               clip_limit=self.eqadapthist_clip_limit,
+                               nbins=self.eqadapthist_nbins)
+            for img in Xb.transpose(0, 2, 3, 1)])
+        # Back from b01c to bc01
+        Xb_transformed = Xb_transformed.transpose(0, 3, 1, 2).astype(np.float32)
+        return Xb_transformed, yb
+
+
 def make_iterator(name, mixin):
     """
     Return an Iterator class added with the provided mixin
@@ -222,6 +312,32 @@ def make_iterator(name, mixin):
     # Reverse the order for type()
     mixin.reverse()
     return type(name, tuple(mixin), {})
+
+
+def make_buffer_for_iterator(source_gen, buffer_size=2):
+    """
+    Taken from https://github.com/benanne/kaggle-ndsb/blob/05275ce473f0516f5b0abaac6a7a08a3cefda1e8/buffering.py#L31
+    Generator that runs a slow source generator in a separate thread. Beware of the GIL!
+    buffer_size: the maximal number of items to pre-generate (length of the buffer)
+    """
+    if buffer_size < 2:
+        raise RuntimeError("Minimal buffer size is 2!")
+
+    buffer = Queue.Queue(maxsize=buffer_size - 1)
+    # the effective buffer size is one less, because the generation process
+    # will generate one extra element and block until there is room in the buffer.
+
+    def _buffered_generation_thread(source_gen, buffer):
+        for data in source_gen:
+            buffer.put(data, block=True)
+        buffer.put(None)  # sentinel: signal the end of the iterator
+
+    thread = threading.Thread(target=_buffered_generation_thread, args=(source_gen, buffer))
+    thread.daemon = True
+    thread.start()
+
+    for data in iter(buffer.get, None):
+        yield data
 
 
 def shuffle(*arrays):
