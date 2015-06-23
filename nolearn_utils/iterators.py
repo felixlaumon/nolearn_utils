@@ -166,7 +166,7 @@ class RandomCropBatchIteratorMixin(object):
         img_h = Xb.shape[2]
         img_w = Xb.shape[3]
         Xb_transformed = np.empty((batch_size, Xb.shape[1],
-                                   self.crop_size[0], self.crop_size[1]))
+                                   self.crop_size[0], self.crop_size[1]), dtype=np.float32)
         # TODO vectorize implementation if possible
         for i in range(batch_size):
             start_0 = np.random.choice(img_h - self.crop_size[0])
@@ -271,10 +271,9 @@ class LCNBatchIteratorMixin(object):
 
     def transform(self, Xb, yb):
         Xb, yb = super(LCNBatchIteratorMixin, self).transform(Xb, yb)
-        if len(Xb.shape) != 4 or Xb.shape[1] != 1:
-            raise ValueError('X must be in shape of (batch_size, 1, height, width) but is %s', Xb.shape)
-        Xb_transformed = np.asarray([local_contrast_normalization(img[0], self.lcn_selem) for img in Xb])
-        Xb_transformed = Xb_transformed[:, np.newaxis, :, :]
+        Xb_transformed = np.asarray(
+            [[local_contrast_normalization(img_ch, self.lcn_selem) for img_ch in img] for img in Xb]
+        )
         return Xb_transformed, yb
 
 
@@ -363,7 +362,7 @@ def im_affine_transform(img, scale, rotation, translation_y, translation_x):
 
     warped_img = warp(img, tform)
     warped_img = warped_img.transpose(2, 0, 1)
-    return warped_img
+    return warped_img.astype(img.dtype)
 
 
 def local_contrast_normalization(img, selem=disk(5)):

@@ -1,6 +1,7 @@
 import numpy as np
 import cPickle as pickle
-import matplotlib.pyplot as plt
+import matplotlib
+matplotlib.use('Agg')
 
 
 class EarlyStopping(object):
@@ -68,6 +69,8 @@ class PlotTrainingHistory(object):
         self.figsize = figsize
 
     def __call__(self, nn, train_history):
+        import matplotlib.pyplot as plt
+
         valid_accuracy = np.asarray([history['valid_accuracy'] for history in train_history])
         train_loss = np.asarray([history['train_loss'] for history in train_history])
         valid_loss = np.asarray([history['valid_loss'] for history in train_history])
