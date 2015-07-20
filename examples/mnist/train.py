@@ -1,44 +1,40 @@
 import numpy as np
 import pandas as pd
 
-from sklearn.datasets import fetch_mldata
 from sklearn.cross_validation import train_test_split
 
-from lasagne.layers import InputLayer, DenseLayer, DropoutLayer
+from lasagne.layers import InputLayer, DenseLayer, DropoutLayer, FeaturePoolLayer
 from lasagne.layers.dnn import Conv2DDNNLayer, MaxPool2DDNNLayer
 from lasagne import nonlinearities
 from lasagne import objectives
 from lasagne import updates
 
 from nolearn.lasagne import NeuralNet
-from nolearn.lasagne.handlers import SaveWeights, PrintLayerInfo
-from nolearn.lasagne.util import get_conv_infos
+from nolearn.lasagne.handlers import SaveWeights
 
 from nolearn_utils.iterators import (
     BufferedBatchIteratorMixin,
-    ReadImageBatchIteratorMixin,
     ShuffleBatchIteratorMixin,
-    LCNBatchIteratorMixin,
-    RandomFlipBatchIteratorMixin,
-    EqualizeAdaptHistBatchIteratorMixin,
     AffineTransformBatchIteratorMixin,
     make_iterator
 )
 from nolearn_utils.hooks import SaveTrainingHistory, PlotTrainingHistory
 
 
-image_size = 28
-mnist = fetch_mldata('MNIST original')
-X = mnist.data.reshape(-1, 1, image_size, image_size).astype(np.float32) / 255
-y = mnist.target.astype(np.int32)
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=42)
+def load_data(test_size=0.25, random_state=None):
+    df = pd.read_csv('examples/mnist/train.csv')
+    X = df[df.columns[1:]].values.reshape(-1, 1, 28, 28).astype(np.float32)
+    X = X / 255
+    y = df['label'].values.astype(np.int32)
+    return train_test_split(X, y, test_size=test_size, random_state=random_state)
 
-batch_size = 256
+
+image_size = 28
+batch_size = 1024
 n_classes = 10
 
 train_iterator_mixins = [
     ShuffleBatchIteratorMixin,
-    RandomFlipBatchIteratorMixin,
     AffineTransformBatchIteratorMixin,
     BufferedBatchIteratorMixin,
 ]
@@ -52,12 +48,10 @@ TestIterator = make_iterator('TestIterator', test_iterator_mixins)
 train_iterator_kwargs = {
     'buffer_size': 5,
     'batch_size': batch_size,
-    'flip_horizontal_p': 0.5,
-    'flip_vertical_p': 0.5,
     'affine_p': 0.5,
     'affine_scale_choices': np.linspace(0.75, 1.25, 5),
-    'affine_translation_choices': np.arange(-24, 24, 4),
-    'affine_rotation_choices': np.arange(0, 360, 36),
+    'affine_translation_choices': np.arange(-5, 6, 1),
+    'affine_rotation_choices': np.arange(-45, 50, 5),
 }
 train_iterator = TrainIterator(**train_iterator_kwargs)
 
@@ -73,45 +67,30 @@ plot_training_history = PlotTrainingHistory('./training_history.png')
 
 net = NeuralNet(
     layers=[
-        ('in', InputLayer),
+        (InputLayer, dict(name='in', shape=(None, 1, image_size, image_size))),
+        (Conv2DDNNLayer, dict(name='l1c1', num_filters=32, filter_size=(3, 3), border_mode='same')),
+        (Conv2DDNNLayer, dict(name='l1c2', num_filters=32, filter_size=(3, 3), border_mode='same')),
+        (MaxPool2DDNNLayer, dict(name='l1p', pool_size=3, stride=2)),
 
-        ('l1c1', Conv2DDNNLayer),
-        ('l1c2', Conv2DDNNLayer),
-        ('l1p', MaxPool2DDNNLayer),
+        (Conv2DDNNLayer, dict(name='l2c1', num_filters=32, filter_size=(3, 3), border_mode='same')),
+        (Conv2DDNNLayer, dict(name='l2c2', num_filters=32, filter_size=(3, 3), border_mode='same')),
+        (MaxPool2DDNNLayer, dict(name='l2p', pool_size=3, stride=2)),
 
-        ('l2c1', Conv2DDNNLayer),
-        ('l2c2', Conv2DDNNLayer),
-        ('l2p', MaxPool2DDNNLayer),
+        (DenseLayer, dict(name='l7', num_units=256)),
+        (FeaturePoolLayer, dict(name='l7p', pool_size=2)),
+        (DropoutLayer, dict(name='l7drop', p=0.5)),
 
-        ('l7', DenseLayer),
-        ('l7drop', DropoutLayer),
+        (DenseLayer, dict(name='l8', num_units=256)),
+        (FeaturePoolLayer, dict(name='l8p', pool_size=2)),
+        (DropoutLayer, dict(name='l8drop', p=0.5)),
 
-        ('out', DenseLayer),
+        (DenseLayer, dict(name='out', num_units=10, nonlinearity=nonlinearities.softmax)),
     ],
-
-    in_shape=(None, 1, image_size, image_size),
-
-    l1c1_num_filters=32, l1c1_filter_size=(3, 3), l1c1_border_mode='same',
-    l1c2_num_filters=16, l1c2_filter_size=(3, 3), l1c2_border_mode='same',
-    l1p_pool_size=(3, 3),
-    l1p_stride=2,
-
-    l2c1_num_filters=64, l2c1_filter_size=(3, 3), l2c1_border_mode='same',
-    l2c2_num_filters=32, l2c2_filter_size=(3, 3), l2c2_border_mode='same',
-    l2p_pool_size=(3, 3),
-    l2p_stride=2,
-
-    l7_num_units=64,
-    l7drop_p=0.5,
-
-    out_num_units=n_classes,
-    out_nonlinearity=nonlinearities.softmax,
 
     regression=False,
     objective_loss_function=objectives.categorical_crossentropy,
 
-    update=updates.rmsprop,
-    update_learning_rate=1e-3,
+    update=updates.adadelta,
 
     eval_size=0.1,
     batch_iterator_train=train_iterator,
@@ -127,10 +106,12 @@ net = NeuralNet(
     max_epochs=100
 )
 
-net.fit(X_train, y_train)
+if __name__ == '__main__':
+    X_train, X_test, y_train, y_test = load_data(test_size=0.25, random_state=42)
+    net.fit(X_train, y_train)
 
-# Load the best weights from pickled model
-net.load_params_from('./model_weights.pkl')
+    # Load the best weights from pickled model
+    net.load_params_from('./model_weights.pkl')
 
-score = net.score(X_test, y_test)
-print 'Final score %.4f' % score
+    score = net.score(X_test, y_test)
+    print 'Final score %.4f' % score

@@ -15,31 +15,29 @@ Iterators and handlers for nolearn.lasagne to allow efficient real-time image au
 
 Example of using iterators as below:
 
-````py
-train_iterator_mixins = [
-    ShuffleBatchIteratorMixin,
-    ReadImageBatchIteratorMixin,
-    RandomFlipBatchIteratorMixin,
-    AffineTransformBatchIteratorMixin,
-    BufferedBatchIteratorMixin,
-]
-TrainIterator = make_iterator('TrainIterator', train_iterator_mixins)
+    train_iterator_mixins = [
+        ShuffleBatchIteratorMixin,
+        ReadImageBatchIteratorMixin,
+        RandomFlipBatchIteratorMixin,
+        AffineTransformBatchIteratorMixin,
+        BufferedBatchIteratorMixin,
+    ]
+    TrainIterator = make_iterator('TrainIterator', train_iterator_mixins)
 
-train_iterator_kwargs = {
-    'buffer_size': 5,
-    'batch_size': batch_size,
-    'read_image_size': (image_size, image_size),
-    'read_image_as_gray': False,
-    'read_image_prefix_path': './data/train/',
-    'flip_horizontal_p': 0.5,
-    'flip_vertical_p': 0,
-    'affine_p': 0.5,
-    'affine_scale_choices': np.linspace(0.75, 1.25, 5),
-    'affine_translation_choices': np.arange(-3, 4, 1),
-    'affine_rotation_choices': np.arange(-45, 50, 5)
-}
-train_iterator = TrainIterator(**train_iterator_kwargs)
-````
+    train_iterator_kwargs = {
+        'buffer_size': 5,
+        'batch_size': batch_size,
+        'read_image_size': (image_size, image_size),
+        'read_image_as_gray': False,
+        'read_image_prefix_path': './data/train/',
+        'flip_horizontal_p': 0.5,
+        'flip_vertical_p': 0,
+        'affine_p': 0.5,
+        'affine_scale_choices': np.linspace(0.75, 1.25, 5),
+        'affine_translation_choices': np.arange(-3, 4, 1),
+        'affine_rotation_choices': np.arange(-45, 50, 5)
+    }
+    train_iterator = TrainIterator(**train_iterator_kwargs)
 
 The `BaseBatchIterator` is also modified from `nolearn.lasagne` to provide a progress bar for training process for each iteration
 
@@ -57,30 +55,29 @@ Example code requires `scikit-learn`
 
 ### MNIST
 
-`example/mnist/train.py` should produce a model of about 99% accuracy at 150 iteration.
+`example/mnist/train.py` should produce a model of about 99.5% accuracy in less than 50 epoch.
 
-MNIST data is automatically downloaded by `scikit-learn` utility.
+MNIST data can be downloaded from
+[Kaggle](https://www.kaggle.com/c/digit-recognizer).
 
 ### CIFAR10
 
 CIFAR10 images can be downloaded from [Kaggle](https://www.kaggle.com/c/cifar-10/data). Place the downloaded data as follows:
 
-````
-examples/cifar10
-├── data
-│   ├── train
-│   |   ├── 1.png
-│   |   ├── 2.png
-│   |   ├── 3.png
-│   |   ├── ...
-│   └── trainLabels.csv
-├── model_history.pkl
-├── model_weights.pkl
-├── training_history.png
-└── train.py
-````
+    examples/cifar10
+    ├── data
+    │   ├── train
+    │   |   ├── 1.png
+    │   |   ├── 2.png
+    │   |   ├── 3.png
+    │   |   ├── ...
+    │   └── trainLabels.csv
+    ├── model_history.pkl
+    ├── model_weights.pkl
+    ├── training_history.png
+    └── train.py
 
-`example/cifat10/train.py` should produce a model at about 85% accuracy at 100 iterations. Images are read from disk and augmented at training time (from another thread)
+`example/cifat10/train.py` should produce a model at about 85% accuracy at 100 epoch. Images are read from disk and augmented at training time (from another thread)
 
 ## License
 
