@@ -3,7 +3,6 @@ from __future__ import print_function
 
 import sys
 import os
-from time import time
 
 import Queue
 import threading
@@ -19,17 +18,15 @@ from skimage.transform import warp
 from skimage.filters import rank
 from skimage.morphology import disk
 from skimage.exposure import equalize_adapthist
+from skimage.exposure import equalize_hist
 
-from progressbar import (
-    ProgressBar, Bar,
-    Counter, Percentage, RotatingMarker,
-    AdaptiveETA
-)
+from joblib import Parallel, delayed
 
 
 class BaseBatchIterator(object):
-    def __init__(self, batch_size, verbose=False):
+    def __init__(self, batch_size, verbose=False, n_jobs=4):
         self.batch_size = batch_size
+        self.n_jobs = n_jobs
         self.verbose = False
 
     def __call__(self, X, y=None):
@@ -40,13 +37,6 @@ class BaseBatchIterator(object):
         n_samples = self.X.shape[0]
         bs = self.batch_size
         n_batches = (n_samples + bs - 1) // bs
-        widgets = [
-            Counter(), ' ',
-            Percentage(), ' ',
-            Bar(), ' ',
-            AdaptiveETA()
-        ]
-        pbar = ProgressBar(widgets=widgets, maxval=n_batches).start()
 
         for i in range(n_batches):
             sl = slice(i * bs, (i + 1) * bs)
@@ -56,8 +46,6 @@ class BaseBatchIterator(object):
             else:
                 yb = None
             yield self.transform(Xb, yb)
-            pbar.update(i)
-        pbar.finish()
 
     @property
     def n_samples(self):
@@ -136,19 +124,20 @@ class AffineTransformBatchIteratorMixin(object):
         # disabling affine transformation
         if self.affine_p == 0:
             return Xb, yb
+
         idx = get_random_idx(Xb, self.affine_p)
-        Xb_transformed = np.empty_like(Xb)
-        for i, img in enumerate(Xb):
+        Xb_transformed = Xb.copy()
+        for i in idx:
             scale = choice(self.affine_scale_choices)
             rotation = choice(self.affine_rotation_choices)
             translation_y = choice(self.affine_translation_choices)
             translation_x = choice(self.affine_translation_choices)
-            img_transformed = im_affine_transform(img, scale=scale,
+            img_transformed = im_affine_transform(Xb[i], scale=scale,
                                                   rotation=rotation,
                                                   translation_y=translation_y,
                                                   translation_x=translation_x)
             Xb_transformed[i] = img_transformed
-        return Xb, yb
+        return Xb_transformed, yb
 
 
 class RandomCropBatchIteratorMixin(object):
@@ -261,6 +250,22 @@ class MeanSubtractBatchiteratorMixin(object):
         return Xb, yb
 
 
+class EqualizeHistBatchIteratorMixin(object):
+    """
+    Simple HIstorgram Equalization. Applied per channel
+    """
+    def __init__(self, *args, **kwargs):
+        super(EqualizeHistBatchIteratorMixin, self).__init__(*args, **kwargs)
+
+    def transform(self, Xb, yb):
+        Xb, yb = super(EqualizeHistBatchIteratorMixin, self).transform(Xb, yb)
+        Xb_transformed = np.asarray([
+            [equalize_hist(img_ch) for img_ch in img] for img in Xb
+        ])
+        Xb_transformed = Xb_transformed.astype(Xb.dtype)
+        return Xb_transformed, yb
+
+
 class LCNBatchIteratorMixin(object):
     """
     Apply local contrast normalization to images
@@ -272,7 +277,7 @@ class LCNBatchIteratorMixin(object):
     def transform(self, Xb, yb):
         Xb, yb = super(LCNBatchIteratorMixin, self).transform(Xb, yb)
         Xb_transformed = np.asarray(
-            [[local_contrast_normalization(img_ch, self.lcn_selem) for img_ch in img] for img in Xb]
+            pmap(local_contrast_normalization, Xb, n_jobs=self.n_jobs, selem=self.lcn_selem)
         )
         return Xb_transformed, yb
 
@@ -292,6 +297,7 @@ class EqualizeAdaptHistBatchIteratorMixin(object):
 
     def transform(self, Xb, yb):
         Xb, yb = super(EqualizeAdaptHistBatchIteratorMixin, self).transform(Xb, yb)
+        # TODO doesn't work for greyscale image
         Xb_transformed = np.asarray([
             equalize_adapthist(img, ntiles_x=self.eqadapthist_ntiles_x,
                                ntiles_y=self.eqadapthist_ntiles_y,
@@ -339,6 +345,10 @@ def make_buffer_for_iterator(source_gen, buffer_size=2):
         yield data
 
 
+def pmap(func, arr, n_jobs=1, *args, **kwargs):
+    return Parallel(n_jobs)(delayed(func)(x, *args, **kwargs) for x in arr)
+
+
 def shuffle(*arrays):
     p = np.random.permutation(len(arrays[0]))
     return [array[p] for array in arrays]
@@ -366,7 +376,13 @@ def im_affine_transform(img, scale, rotation, translation_y, translation_x):
 
 
 def local_contrast_normalization(img, selem=disk(5)):
-    return rank.equalize(img, selem)
+    img = (img * 255).astype(np.uint8)
+    if len(img.shape) <= 2:
+        img = rank.equalize(img, selem)
+    else:
+        img = np.asarray([rank.equalize(ch, selem) for ch in img])
+    img = img.astype(np.float32) / 255
+    return img
 
 
 def get_random_idx(arr, p):
