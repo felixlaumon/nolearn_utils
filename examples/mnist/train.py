@@ -61,9 +61,9 @@ test_iterator_kwargs = {
 }
 test_iterator = TestIterator(**test_iterator_kwargs)
 
-save_weights = SaveWeights('./model_weights.pkl', only_best=True, pickle=False)
-save_training_history = SaveTrainingHistory('./model_history.pkl')
-plot_training_history = PlotTrainingHistory('./training_history.png')
+save_weights = SaveWeights('./examples/mnist/model_weights.pkl', only_best=True, pickle=False)
+save_training_history = SaveTrainingHistory('./examples/mnist/model_history.pkl')
+plot_training_history = PlotTrainingHistory('./examples/mnist/training_history.png')
 
 net = NeuralNet(
     layers=[
@@ -111,7 +111,7 @@ if __name__ == '__main__':
     net.fit(X_train, y_train)
 
     # Load the best weights from pickled model
-    net.load_params_from('./model_weights.pkl')
+    net.load_params_from('./examples/mnist/model_weights.pkl')
 
     score = net.score(X_test, y_test)
     print 'Final score %.4f' % score

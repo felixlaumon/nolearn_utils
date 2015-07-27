@@ -78,6 +78,23 @@ class ShuffleBatchIteratorMixin(object):
             yield res
 
 
+class RebalanceBatchIteratorMixin(object):
+    """
+    Rebalance dataset by undersampling all classes to the least
+    popular class
+    """
+    def __call__(self, X, y):
+        super(RebalanceBatchIteratorMixin, self).__call__(X, y)
+        X, y = self.X, self.y
+        assert y.ndim == 1
+        target_size = np.bincount(y).min()
+        mask = np.zeros_like(y, dtype=bool)
+        for yval in np.unique(y):
+            mask[random.sample(np.where(y == yval)[0], target_size)] = True
+        self.X, self.y = X[mask], y[mask]
+        return self
+
+
 class BufferedBatchIteratorMixin(object):
     """
     Create a buffered iterator which the next batch will be generated
@@ -220,7 +237,11 @@ class ReadImageBatchIteratorMixin(object):
                 print('Reading %s' % img_fname)
             img = imread(img_fname,
                          as_grey=self.read_image_as_gray)
-            img = resize(img, (h, w))
+
+            if img.shape[0] != h and img.shape[1] != w:
+                img = resize(img, (h, w))
+            else:
+                img = img.astype(float) / 255
 
             # When reading image as color image, convert grayscale image to RGB for consistency
             if len(img.shape) == 2 and self.read_image_as_gray is False:
