@@ -6,6 +6,7 @@ import os
 
 import Queue
 import threading
+import random
 
 import numpy as np
 from numpy.random import choice
@@ -261,13 +262,10 @@ class MeanSubtractBatchiteratorMixin(object):
     """
     TODO should calculate the mean
     """
-    def __init__(self, mean, *args, **kwargs):
-        super(MeanSubtractBatchiteratorMixin, self).__init__(*args, **kwargs)
-        self.mean = mean
-
     def transform(self, Xb, yb):
         Xb, yb = super(MeanSubtractBatchiteratorMixin, self).transform(Xb, yb)
-        Xb = Xb - self.mean
+        Xb -= Xb.mean(axis=0)
+        # Xb /= Xb.std(axis=0)
         return Xb, yb
 
 
@@ -300,6 +298,10 @@ class LCNBatchIteratorMixin(object):
         Xb_transformed = np.asarray(
             pmap(local_contrast_normalization, Xb, n_jobs=self.n_jobs, selem=self.lcn_selem)
         )
+        # Xb_transformed = np.asarray([
+        #     local_contrast_normalization(x, selem=self.lcn_selem)
+        #     for x in Xb
+        # ])
         return Xb_transformed, yb
 
 
