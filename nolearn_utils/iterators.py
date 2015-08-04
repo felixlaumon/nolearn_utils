@@ -378,6 +378,7 @@ def shuffle(*arrays):
 
 
 def im_affine_transform(img, scale, rotation, translation_y, translation_x):
+    # Assumed img in c01. Convert to 01c for skimage
     img = img.transpose(1, 2, 0)
     # Normalize so that the param acts more like im_rotate, im_translate etc
     scale = 1 / scale
@@ -394,6 +395,8 @@ def im_affine_transform(img, scale, rotation, translation_y, translation_x):
     tform = tform_center + tform + tform_uncenter
 
     warped_img = warp(img, tform)
+
+    # Convert back from 01c to c01
     warped_img = warped_img.transpose(2, 0, 1)
     return warped_img.astype(img.dtype)
 

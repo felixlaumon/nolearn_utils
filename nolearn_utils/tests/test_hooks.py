@@ -1,6 +1,5 @@
 import pytest
 from mock import MagicMock
-from nolearn.lasagne import NeuralNet
 
 
 @pytest.fixture()

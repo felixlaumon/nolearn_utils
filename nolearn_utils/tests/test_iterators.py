@@ -111,7 +111,7 @@ def test_mean_subtraction_batch_iterator(X, y):
     class Iterator(MeanSubtractBatchiteratorMixin, BaseBatchIterator):
         pass
 
-    iterator = Iterator(batch_size=2, mean=np.random.rand(3, 48, 48))
+    iterator = Iterator(batch_size=2)
 
     for Xb, yb in iterator(X, y):
         pass

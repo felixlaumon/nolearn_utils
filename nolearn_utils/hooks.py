@@ -1,7 +1,5 @@
 import numpy as np
 import cPickle as pickle
-import matplotlib
-matplotlib.use('Agg')
 
 
 class EarlyStopping(object):
