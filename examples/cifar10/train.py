@@ -1,6 +1,3 @@
-import matplotlib
-matplotlib.use('Agg')
-
 import os
 import numpy as np
 import pandas as pd
@@ -96,14 +93,16 @@ net = NeuralNet(
     layers=[
         (InputLayer, dict(name='in', shape=(None, 3, image_size, image_size))),
 
-        (Conv2DDNNLayer, dict(name='l1c1', num_filters=16, filter_size=(3, 3), border_mode='same')),
-        (Conv2DDNNLayer, dict(name='l1c2', num_filters=16, filter_size=(3, 3), border_mode='same')),
-        (Conv2DDNNLayer, dict(name='l1c3', num_filters=32, filter_size=(3, 3), border_mode='same')),
+        (Conv2DDNNLayer, dict(name='l1c1', num_filters=16, filter_size=(3, 3), pad='same')),
+        (Conv2DDNNLayer, dict(name='l1c2', num_filters=16, filter_size=(3, 3), pad='same')),
+        (Conv2DDNNLayer, dict(name='l1c3', num_filters=32, filter_size=(3, 3), pad='same')),
+        (Conv2DDNNLayer, dict(name='l1c4', num_filters=32, filter_size=(3, 3), pad='same')),
         (MaxPool2DDNNLayer, dict(name='l1p', pool_size=3, stride=2)),
 
-        (Conv2DDNNLayer, dict(name='l2c1', num_filters=32, filter_size=(3, 3), border_mode='same')),
-        (Conv2DDNNLayer, dict(name='l2c2', num_filters=32, filter_size=(3, 3), border_mode='same')),
-        (Conv2DDNNLayer, dict(name='l2c3', num_filters=64, filter_size=(3, 3), border_mode='same')),
+        (Conv2DDNNLayer, dict(name='l2c1', num_filters=32, filter_size=(3, 3), pad='same')),
+        (Conv2DDNNLayer, dict(name='l2c2', num_filters=32, filter_size=(3, 3), pad='same')),
+        (Conv2DDNNLayer, dict(name='l2c3', num_filters=64, filter_size=(3, 3), pad='same')),
+        (Conv2DDNNLayer, dict(name='l2c4', num_filters=64, filter_size=(3, 3), pad='same')),
         (MaxPool2DDNNLayer, dict(name='l2p', pool_size=3, stride=2)),
 
         (DenseLayer, dict(name='l7', num_units=512)),
@@ -120,9 +119,8 @@ net = NeuralNet(
     regression=False,
     objective_loss_function=objectives.categorical_crossentropy,
 
-    update=updates.adadelta,
+    update=updates.adam,
 
-    eval_size=0.1,
     batch_iterator_train=train_iterator,
     batch_iterator_test=test_iterator,
 
@@ -144,8 +142,8 @@ if __name__ == '__main__':
 
     net.fit(X_train, y_train)
 
-    # Load the best weights from pickled model
-    net.load_params_from('./examples/cifar10/model_weights.pkl')
+    # # Load the best weights from pickled model
+    # net.load_params_from('./examples/cifar10/model_weights.pkl')
 
-    score = net.score(X_test, y_test)
-    print 'Final score %.4f' % score
+    # score = net.score(X_test, y_test)
+    # print 'Final score %.4f' % score

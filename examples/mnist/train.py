@@ -68,12 +68,12 @@ plot_training_history = PlotTrainingHistory('./examples/mnist/training_history.p
 net = NeuralNet(
     layers=[
         (InputLayer, dict(name='in', shape=(None, 1, image_size, image_size))),
-        (Conv2DDNNLayer, dict(name='l1c1', num_filters=32, filter_size=(3, 3), border_mode='same')),
-        (Conv2DDNNLayer, dict(name='l1c2', num_filters=32, filter_size=(3, 3), border_mode='same')),
+        (Conv2DDNNLayer, dict(name='l1c1', num_filters=32, filter_size=(3, 3), pad='same')),
+        (Conv2DDNNLayer, dict(name='l1c2', num_filters=32, filter_size=(3, 3), pad='same')),
         (MaxPool2DDNNLayer, dict(name='l1p', pool_size=3, stride=2)),
 
-        (Conv2DDNNLayer, dict(name='l2c1', num_filters=32, filter_size=(3, 3), border_mode='same')),
-        (Conv2DDNNLayer, dict(name='l2c2', num_filters=32, filter_size=(3, 3), border_mode='same')),
+        (Conv2DDNNLayer, dict(name='l2c1', num_filters=32, filter_size=(3, 3), pad='same')),
+        (Conv2DDNNLayer, dict(name='l2c2', num_filters=32, filter_size=(3, 3), pad='same')),
         (MaxPool2DDNNLayer, dict(name='l2p', pool_size=3, stride=2)),
 
         (DenseLayer, dict(name='l7', num_units=256)),
@@ -92,7 +92,6 @@ net = NeuralNet(
 
     update=updates.adadelta,
 
-    eval_size=0.1,
     batch_iterator_train=train_iterator,
     batch_iterator_test=test_iterator,
 

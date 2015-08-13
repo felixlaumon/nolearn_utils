@@ -239,7 +239,7 @@ class ReadImageBatchIteratorMixin(object):
             img = imread(img_fname,
                          as_grey=self.read_image_as_gray)
 
-            if img.shape[0] != h and img.shape[1] != w:
+            if img.shape[0] != h or img.shape[1] != w:
                 img = resize(img, (h, w))
             else:
                 img = img.astype(float) / 255

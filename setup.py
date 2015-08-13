@@ -14,18 +14,18 @@ except IOError:
 install_requires = [
     'nolearn',
     'Lasagne'
-    ]
+]
 
 tests_require = [
     'mock',
     'pytest',
     'pytest-cov',
     'pytest-pep8',
-    ]
+]
 
 docs_require = [
     'Sphinx',
-    ]
+]
 
 setup(
     name="nolearn_utils",
@@ -35,8 +35,7 @@ setup(
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Programming Language :: Python :: 2.7",
-        "Programming Language :: Python :: 3.4",
-        ],
+    ],
     keywords="",
     author="Felix Lau",
     author_email="felixlaumon@gmail.com",
@@ -49,6 +48,5 @@ setup(
     extras_require={
         'testing': tests_require,
         'docs': docs_require,
-        },
-    )
-
+    },
+)
