@@ -138,7 +138,7 @@ class AffineTransformBatchIteratorMixin(object):
     def transform(self, Xb, yb):
         Xb, yb = super(AffineTransformBatchIteratorMixin,
                        self).transform(Xb, yb)
-        # Skip if affine_p is 0. Setting affine_p may be useful for quikcly
+        # Skip if affine_p is 0. Setting affine_p may be useful for quickly
         # disabling affine transformation
         if self.affine_p == 0:
             return Xb, yb
@@ -260,12 +260,15 @@ class ReadImageBatchIteratorMixin(object):
 
 class MeanSubtractBatchiteratorMixin(object):
     """
-    TODO should calculate the mean
+    Subtract training examples by the given mean
     """
+    def __init__(self, mean, *args, **kwargs):
+        super(MeanSubtractBatchiteratorMixin, self).__init__(*args, **kwargs)
+        self.mean = mean
+
     def transform(self, Xb, yb):
         Xb, yb = super(MeanSubtractBatchiteratorMixin, self).transform(Xb, yb)
-        Xb -= Xb.mean(axis=0)
-        # Xb /= Xb.std(axis=0)
+        Xb -= self.mean
         return Xb, yb
 
 
@@ -295,13 +298,10 @@ class LCNBatchIteratorMixin(object):
 
     def transform(self, Xb, yb):
         Xb, yb = super(LCNBatchIteratorMixin, self).transform(Xb, yb)
-        Xb_transformed = np.asarray(
-            pmap(local_contrast_normalization, Xb, n_jobs=self.n_jobs, selem=self.lcn_selem)
-        )
-        # Xb_transformed = np.asarray([
-        #     local_contrast_normalization(x, selem=self.lcn_selem)
-        #     for x in Xb
-        # ])
+        Xb_transformed = np.asarray([
+            local_contrast_normalization(x, selem=self.lcn_selem)
+            for x in Xb
+        ])
         return Xb_transformed, yb
 
 

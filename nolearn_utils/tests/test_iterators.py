@@ -48,8 +48,8 @@ def test_shuffle_batch_iterator(X, y):
     iterator = Iterator(batch_size=128)
     np.random.seed(42)  # Deterministic tests
     Xb, yb = iter(iterator(X, y)).next()
-    assert np.all(Xb != X[:128]) == True
-    assert np.all(yb != y[:128]) == True
+    assert np.all(Xb != X[:128])
+    assert np.all(yb != y[:128])
 
 
 def test_afffine_batch_iterator(X, y):
@@ -111,7 +111,7 @@ def test_mean_subtraction_batch_iterator(X, y):
     class Iterator(MeanSubtractBatchiteratorMixin, BaseBatchIterator):
         pass
 
-    iterator = Iterator(batch_size=2)
+    iterator = Iterator(batch_size=2, mean=np.zeros((3, 48, 48)))
 
     for Xb, yb in iterator(X, y):
         pass
