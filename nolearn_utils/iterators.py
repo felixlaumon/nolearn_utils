@@ -7,6 +7,7 @@ import os
 import Queue
 import threading
 import random
+import time
 
 import numpy as np
 from numpy.random import choice
@@ -20,15 +21,17 @@ from skimage.filters import rank
 from skimage.morphology import disk
 from skimage.exposure import equalize_adapthist
 from skimage.exposure import equalize_hist
+from skimage.exposure import adjust_gamma
 
 from joblib import Parallel, delayed
+# from multiprocessing import Pool
 
 
 class BaseBatchIterator(object):
-    def __init__(self, batch_size, verbose=False, n_jobs=4):
+    def __init__(self, batch_size, shuffle=False, verbose=False):
         self.batch_size = batch_size
-        self.n_jobs = n_jobs
         self.verbose = False
+        self.shuffle = shuffle
 
     def __call__(self, X, y=None):
         self.X, self.y = X, y
@@ -39,11 +42,16 @@ class BaseBatchIterator(object):
         bs = self.batch_size
         n_batches = (n_samples + bs - 1) // bs
 
+        if self.shuffle:
+            idx = np.random.permutation(len(self.X))
+        else:
+            idx = range(len(self.X))
+
         for i in range(n_batches):
             sl = slice(i * bs, (i + 1) * bs)
-            Xb = self.X[sl]
+            Xb = self.X[idx[sl]]
             if self.y is not None:
-                yb = self.y[sl]
+                yb = self.y[idx[sl]]
             else:
                 yb = None
             yield self.transform(Xb, yb)
@@ -74,26 +82,55 @@ class ShuffleBatchIteratorMixin(object):
     Shuffle the order of samples
     """
     def __iter__(self):
+        orig_X, orig_y = self.X, self.y
         self.X, self.y = shuffle(self.X, self.y)
+
         for res in super(ShuffleBatchIteratorMixin, self).__iter__():
             yield res
+
+        self.X, self.y = orig_X, orig_y
 
 
 class RebalanceBatchIteratorMixin(object):
     """
     Rebalance dataset by undersampling all classes to the least
     popular class
+
+    Use the shuffle mixin because this sort the samples by y
     """
-    def __call__(self, X, y):
-        super(RebalanceBatchIteratorMixin, self).__call__(X, y)
+    def __init__(self, rebalance_strength, *args, **kwargs):
+        super(RebalanceBatchIteratorMixin, self).__init__(*args, **kwargs)
+        self.rebalance_strength = rebalance_strength
+
+    def __iter__(self):
         X, y = self.X, self.y
         assert y.ndim == 1
-        target_size = np.bincount(y).min()
-        mask = np.zeros_like(y, dtype=bool)
-        for yval in np.unique(y):
-            mask[random.sample(np.where(y == yval)[0], target_size)] = True
-        self.X, self.y = X[mask], y[mask]
-        return self
+
+        ydist = np.bincount(y).astype(float) / len(y)
+        ydist = ydist[ydist > 0]
+        new_ydist = np.exp(ydist / self.rebalance_strength)
+        new_ydist = new_ydist / new_ydist.sum()
+        y_target_sizes = (len(y) * new_ydist).astype(int)
+
+        rebalance_idx = []
+        for i, yval in enumerate(np.unique(y)):
+            yval_n = np.sum(y == yval)
+            target_size = y_target_sizes[i]
+
+            if yval_n > target_size:
+                rebalance_idx += random.sample(np.where(y == yval)[0], target_size)
+            else:
+                idx = np.where(y == yval)[0]
+                idx = np.repeat(idx, target_size / yval_n)
+                rebalance_idx += idx.tolist()
+
+        X_orig, y_orig = X, y
+        self.X, self.y = X[rebalance_idx], y[rebalance_idx]
+
+        for res in super(RebalanceBatchIteratorMixin, self).__iter__():
+            yield res
+
+        self.X, self.y = X_orig, y_orig
 
 
 class BufferedBatchIteratorMixin(object):
@@ -113,14 +150,26 @@ class BufferedBatchIteratorMixin(object):
         return make_buffer_for_iterator(gen, self.buffer_size)
 
 
+class BufferedThreadedBatchIteratorMixin(object):
+    def __init__(self, buffer_size=2, n_jobs=2, *args, **kwargs):
+        super(BufferedThreadedBatchIteratorMixin, self).__init__(*args, **kwargs)
+        self.buffer_size = buffer_size
+        self.n_workers = 2
+
+    def __iter__(self):
+        gen = super(BufferedThreadedBatchIteratorMixin, self).__iter__()
+        return make_buffer_for_iterator_with_thread(gen, self.n_workers, self.buffer_size)
+
+
 class AffineTransformBatchIteratorMixin(object):
     """
     Apply affine transform (scale, translate and rotation)
     with a random chance
     """
     def __init__(self, affine_p,
-                 affine_scale_choices, affine_translation_choices,
-                 affine_rotation_choices,
+                 affine_scale_choices=[1.], affine_translation_choices=[0.],
+                 affine_rotation_choices=[0.], affine_shear_choices=[0.],
+                 affine_transform_bbox=False,
                  *args, **kwargs):
         super(AffineTransformBatchIteratorMixin,
               self).__init__(*args, **kwargs)
@@ -128,12 +177,14 @@ class AffineTransformBatchIteratorMixin(object):
         self.affine_scale_choices = affine_scale_choices
         self.affine_translation_choices = affine_translation_choices
         self.affine_rotation_choices = affine_rotation_choices
+        self.affine_shear_choices = affine_shear_choices
 
         if self.verbose:
             print('Random transform probability: %.2f' % self.affine_p)
             print('Rotation choices', self.affine_rotation_choices)
             print('Scale choices', self.affine_scale_choices)
             print('Translation choices', self.affine_translation_choices)
+            print('Shear choices', self.affine_shear_choices)
 
     def transform(self, Xb, yb):
         Xb, yb = super(AffineTransformBatchIteratorMixin,
@@ -145,16 +196,22 @@ class AffineTransformBatchIteratorMixin(object):
 
         idx = get_random_idx(Xb, self.affine_p)
         Xb_transformed = Xb.copy()
+
         for i in idx:
             scale = choice(self.affine_scale_choices)
             rotation = choice(self.affine_rotation_choices)
+            shear = choice(self.affine_shear_choices)
             translation_y = choice(self.affine_translation_choices)
             translation_x = choice(self.affine_translation_choices)
-            img_transformed = im_affine_transform(Xb[i], scale=scale,
-                                                  rotation=rotation,
-                                                  translation_y=translation_y,
-                                                  translation_x=translation_x)
+            img_transformed, tform = im_affine_transform(
+                Xb[i], return_tform=True,
+                scale=scale, rotation=rotation,
+                shear=shear,
+                translation_y=translation_y,
+                translation_x=translation_x
+            )
             Xb_transformed[i] = img_transformed
+
         return Xb_transformed, yb
 
 
@@ -262,13 +319,13 @@ class MeanSubtractBatchiteratorMixin(object):
     """
     Subtract training examples by the given mean
     """
-    def __init__(self, mean, *args, **kwargs):
+    def __init__(self, mean=None, *args, **kwargs):
         super(MeanSubtractBatchiteratorMixin, self).__init__(*args, **kwargs)
         self.mean = mean
 
     def transform(self, Xb, yb):
         Xb, yb = super(MeanSubtractBatchiteratorMixin, self).transform(Xb, yb)
-        Xb -= self.mean
+        Xb = Xb - self.mean
         return Xb, yb
 
 
@@ -285,6 +342,30 @@ class EqualizeHistBatchIteratorMixin(object):
             [equalize_hist(img_ch) for img_ch in img] for img in Xb
         ])
         Xb_transformed = Xb_transformed.astype(Xb.dtype)
+        return Xb_transformed, yb
+
+
+class AdjustGammaBatchIteratorMixin(object):
+    """
+    Brightness permutation
+    """
+    def __init__(self, adjust_gamma_p, adjust_gamma_chocies, *args, **kwargs):
+        super(AdjustGammaBatchIteratorMixin, self).__init__(*args, **kwargs)
+        self.adjust_gamma_p = adjust_gamma_p
+        self.adjust_gamma_chocies = adjust_gamma_chocies
+
+    def transform(self, Xb, yb):
+        Xb, yb = super(AdjustGammaBatchIteratorMixin, self).transform(Xb, yb)
+        Xb_transformed = Xb.copy()
+
+        if self.adjust_gamma_p > 0:
+            random_idx = get_random_idx(Xb, self.adjust_gamma_p)
+            for i in random_idx:
+                gamma = choice(self.adjust_gamma_chocies)
+                Xb_transformed[i] = adjust_gamma(
+                    Xb[i].transpose(1, 2, 0), gamma=gamma
+                ).transpose(2, 0, 1)
+
         return Xb_transformed, yb
 
 
@@ -368,6 +449,34 @@ def make_buffer_for_iterator(source_gen, buffer_size=2):
         yield data
 
 
+def make_buffer_for_iterator_with_thread(gen, n_workers, buffer_size):
+    wait_time = 0.02
+    generator_queue = Queue.Queue()
+    _stop = threading.Event()
+
+    def generator_task():
+        while not _stop.is_set():
+            try:
+                if generator_queue.qsize() < buffer_size:
+                    generator_output = next(gen)
+                    generator_queue.put(generator_output)
+                else:
+                    time.sleep(wait_time)
+            except (StopIteration, KeyboardInterrupt), e:
+                _stop.set()
+                return
+
+    generator_threads = [threading.Thread(target=generator_task) for _ in range(n_workers)]
+    for thread in generator_threads:
+        thread.start()
+
+    while not _stop.is_set() or not generator_queue.empty():
+        if not generator_queue.empty():
+            yield generator_queue.get()
+        else:
+            time.sleep(wait_time)
+
+
 def pmap(func, arr, n_jobs=1, *args, **kwargs):
     return Parallel(n_jobs)(delayed(func)(x, *args, **kwargs) for x in arr)
 
@@ -377,12 +486,13 @@ def shuffle(*arrays):
     return [array[p] for array in arrays]
 
 
-def im_affine_transform(img, scale, rotation, translation_y, translation_x):
+def im_affine_transform(img, scale, rotation, shear, translation_y, translation_x, return_tform=False):
     # Assumed img in c01. Convert to 01c for skimage
     img = img.transpose(1, 2, 0)
     # Normalize so that the param acts more like im_rotate, im_translate etc
     scale = 1 / scale
     translation_x = - translation_x
+    translation_y = - translation_y
 
     # shift to center first so that image is rotated around center
     center_shift = np.array((img.shape[0], img.shape[1])) / 2. - 0.5
@@ -391,14 +501,19 @@ def im_affine_transform(img, scale, rotation, translation_y, translation_x):
 
     rotation = np.deg2rad(rotation)
     tform = AffineTransform(scale=(scale, scale), rotation=rotation,
-                            translation=(translation_y, translation_x))
+                            shear=shear,
+                            translation=(translation_x, translation_y))
     tform = tform_center + tform + tform_uncenter
 
     warped_img = warp(img, tform)
 
     # Convert back from 01c to c01
     warped_img = warped_img.transpose(2, 0, 1)
-    return warped_img.astype(img.dtype)
+    warped_img = warped_img.astype(img.dtype)
+    if return_tform:
+        return warped_img, tform
+    else:
+        return warped_img
 
 
 def local_contrast_normalization(img, selem=disk(5)):

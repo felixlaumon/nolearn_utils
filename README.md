@@ -72,9 +72,6 @@ CIFAR10 images can be downloaded from [Kaggle](https://www.kaggle.com/c/cifar-10
     │   |   ├── 3.png
     │   |   ├── ...
     │   └── trainLabels.csv
-    ├── model_history.pkl
-    ├── model_weights.pkl
-    ├── training_history.png
     └── train.py
 
 `example/cifat10/train.py` should produce a model at about 85% accuracy at 100 epoch. Images are read from disk and augmented at training time (from another thread)

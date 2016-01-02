@@ -1,3 +1,2 @@
-Theano==0.7
-git+https://github.com/benanne/Lasagne.git@92622ed637#egg=Lasagne
+git+https://github.com/benanne/Lasagne.git@0d1015e28d=Lasagne
 git+https://github.com/WoLpH/python-progressbar.git@c198d46025#egg=progressbar

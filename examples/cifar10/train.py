@@ -1,3 +1,6 @@
+import matplotlib
+matplotlib.use('Agg')
+
 import os
 import numpy as np
 import pandas as pd
@@ -42,7 +45,7 @@ def load_data(test_size=0.25, random_state=None, data_dir='./examples/cifar10/da
     y_train, y_test = y_train.astype(np.int32), y_test.astype(np.int32)
     return X_train, X_test, y_train, y_test
 
-batch_size = 512
+batch_size = 32
 n_classes = 10
 image_size = 32
 
@@ -71,6 +74,7 @@ train_iterator_kwargs = {
     'flip_vertical_p': 0,
     'affine_p': 0.5,
     'affine_scale_choices': np.linspace(0.75, 1.25, 5),
+    'affine_shear_choices': np.linspace(0.75, 1.25, 5),
     'affine_translation_choices': np.arange(-3, 4, 1),
     'affine_rotation_choices': np.arange(-45, 50, 5)
 }
@@ -142,8 +146,8 @@ if __name__ == '__main__':
 
     net.fit(X_train, y_train)
 
-    # # Load the best weights from pickled model
-    # net.load_params_from('./examples/cifar10/model_weights.pkl')
+    # Load the best weights from pickled model
+    net.load_params_from('./examples/cifar10/model_weights.pkl')
 
-    # score = net.score(X_test, y_test)
-    # print 'Final score %.4f' % score
+    score = net.score(X_test, y_test)
+    print 'Final score %.4f' % score
