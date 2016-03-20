@@ -93,39 +93,37 @@ class ShuffleBatchIteratorMixin(object):
 
 class RebalanceBatchIteratorMixin(object):
     """
-    Rebalance dataset by undersampling all classes to the least
-    popular class
-
-    Use the shuffle mixin because this sort the samples by y
+    Rebalance samples at each iteration according to the given per-label weights
     """
-    def __init__(self, rebalance_strength, *args, **kwargs):
+    def __init__(self, rebalance_weights, *args, **kwargs):
         super(RebalanceBatchIteratorMixin, self).__init__(*args, **kwargs)
-        self.rebalance_strength = rebalance_strength
+        self.rebalance_weights = rebalance_weights
+        self._printed = False
 
     def __iter__(self):
         X, y = self.X, self.y
+        X_orig = X
+        y_orig = y
         assert y.ndim == 1
 
+        n = len(X)
         ydist = np.bincount(y).astype(float) / len(y)
-        ydist = ydist[ydist > 0]
-        new_ydist = np.exp(ydist / self.rebalance_strength)
-        new_ydist = new_ydist / new_ydist.sum()
-        y_target_sizes = (len(y) * new_ydist).astype(int)
+        idx = np.arange(n)
 
-        rebalance_idx = []
-        for i, yval in enumerate(np.unique(y)):
-            yval_n = np.sum(y == yval)
-            target_size = y_target_sizes[i]
+        # Create sampling probablity list based on the target
+        # per-label weights
+        p = np.zeros_like(idx, dtype=float)
+        for dist, (label, target_dist) in zip(ydist, enumerate(self.rebalance_weights)):
+            p[y == label] = target_dist / dist
+        p /= p.sum()
 
-            if yval_n > target_size:
-                rebalance_idx += random.sample(np.where(y == yval)[0], target_size)
-            else:
-                idx = np.where(y == yval)[0]
-                idx = np.repeat(idx, target_size / yval_n)
-                rebalance_idx += idx.tolist()
+        idx = np.random.choice(idx, size=n, p=p)
 
-        X_orig, y_orig = X, y
-        self.X, self.y = X[rebalance_idx], y[rebalance_idx]
+        X = X[idx]
+        y = y[idx]
+
+        assert len(X) == len(X_orig)
+        assert len(y) == len(y_orig)
 
         for res in super(RebalanceBatchIteratorMixin, self).__iter__():
             yield res
