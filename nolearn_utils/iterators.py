@@ -347,7 +347,7 @@ class AdjustGammaBatchIteratorMixin(object):
     """
     Brightness permutation
     """
-    def __init__(self, adjust_gamma_p, adjust_gamma_chocies, *args, **kwargs):
+    def __init__(self, adjust_gamma_p, adjust_gamma_chocies=[1.], *args, **kwargs):
         super(AdjustGammaBatchIteratorMixin, self).__init__(*args, **kwargs)
         self.adjust_gamma_p = adjust_gamma_p
         self.adjust_gamma_chocies = adjust_gamma_chocies
