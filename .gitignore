@@ -63,3 +63,9 @@ target/
 # Example data
 examples/cifar10/data
 *.csv
+*.png
+*.pkl
+
+.tags
+tags
+notebooks/

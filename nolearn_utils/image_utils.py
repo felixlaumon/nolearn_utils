@@ -1,7 +1,6 @@
 import numpy as np
 from skimage.transform import SimilarityTransform
 from skimage.transform import AffineTransform
-# from skimage.transform import warp
 from skimage.transform._warps_cy import _warp_fast
 
 
@@ -36,6 +35,24 @@ def augment_color(img, ev, u, sigma=0.1, color_vec=None):
 
 def im_affine_transform(img, scale, rotation, shear,
                         translation_y, translation_x, return_tform=False):
+    """
+    Apply an affine transform using the center of the image as origin
+
+    Parameters
+    ----------
+    img : numpy array, dtype=float, shape=(c, h, w)
+    scale : float
+    rotation : float
+    shear : float
+    translation_x : float
+    translation_y : float
+    return_tform : bool
+
+    Returns
+    -------
+    Transformed image
+    """
+    # TODO assert image is float
     # Assumed img in c01. Convert to 01c for skimage
     img = img.transpose(1, 2, 0)
     # Normalize so that the param acts more like im_rotate, im_translate etc

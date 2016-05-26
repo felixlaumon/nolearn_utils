@@ -1,125 +1,73 @@
-import matplotlib
-matplotlib.use('Agg')
+"""
+THEANO_FLAGS="device=gpu1" ipython -i --pdb examples/mnist/train.py
+"""
+import argparse
 
-import numpy as np
-import pandas as pd
+from sklearn.metrics import log_loss, accuracy_score
 
-from sklearn.cross_validation import train_test_split
+from nolearn_utils.datasets import MNIST
+from nolearn_utils.utils import get_model
 
-from lasagne.layers import InputLayer, DenseLayer, DropoutLayer, FeaturePoolLayer
-from lasagne.layers.dnn import Conv2DDNNLayer, MaxPool2DDNNLayer
-from lasagne import nonlinearities
-from lasagne import objectives
-from lasagne import updates
-
-from nolearn.lasagne import NeuralNet
-from nolearn.lasagne.handlers import SaveWeights
-
-from nolearn_utils.iterators import (
-    BufferedBatchIteratorMixin,
-    ShuffleBatchIteratorMixin,
-    AffineTransformBatchIteratorMixin,
-    make_iterator
-)
-from nolearn_utils.hooks import (
-    SaveTrainingHistory, PlotTrainingHistory,
-    EarlyStopping
-)
-
-
-def load_data(test_size=0.25, random_state=None):
-    df = pd.read_csv('examples/mnist/train.csv')
-    X = df[df.columns[1:]].values.reshape(-1, 1, 28, 28).astype(np.float32)
-    X = X / 255
-    y = df['label'].values.astype(np.int32)
-    return train_test_split(X, y, test_size=test_size, random_state=random_state)
-
-
-image_size = 28
-batch_size = 1024
-n_classes = 10
-
-train_iterator_mixins = [
-    ShuffleBatchIteratorMixin,
-    AffineTransformBatchIteratorMixin,
-    BufferedBatchIteratorMixin,
-]
-TrainIterator = make_iterator('TrainIterator', train_iterator_mixins)
-
-test_iterator_mixins = [
-    BufferedBatchIteratorMixin,
-]
-TestIterator = make_iterator('TestIterator', test_iterator_mixins)
-
-train_iterator_kwargs = {
-    'batch_size': batch_size,
-    'buffer_size': 5,
-    'affine_p': 0.5,
-    'affine_scale_choices': np.linspace(0.75, 1.25, 5),
-    'affine_translation_choices': np.arange(-5, 6, 1),
-    'affine_rotation_choices': np.arange(-45, 50, 5),
-}
-train_iterator = TrainIterator(**train_iterator_kwargs)
-
-test_iterator_kwargs = {
-    'batch_size': batch_size,
-    'buffer_size': 5,
-}
-test_iterator = TestIterator(**test_iterator_kwargs)
-
-save_weights = SaveWeights('./examples/mnist/model_weights.pkl', only_best=True, pickle=False)
-save_training_history = SaveTrainingHistory('./examples/mnist/model_history.pkl')
-plot_training_history = PlotTrainingHistory('./examples/mnist/training_history.png')
-early_stopping = EarlyStopping(metrics='valid_accuracy', patience=100, verbose=True, higher_is_better=True)
-
-net = NeuralNet(
-    layers=[
-        (InputLayer, dict(name='in', shape=(None, 1, image_size, image_size))),
-        (Conv2DDNNLayer, dict(name='l1c1', num_filters=32, filter_size=(3, 3), pad='same')),
-        (Conv2DDNNLayer, dict(name='l1c2', num_filters=32, filter_size=(3, 3), pad='same')),
-        (MaxPool2DDNNLayer, dict(name='l1p', pool_size=3, stride=2)),
-
-        (Conv2DDNNLayer, dict(name='l2c1', num_filters=32, filter_size=(3, 3), pad='same')),
-        (Conv2DDNNLayer, dict(name='l2c2', num_filters=32, filter_size=(3, 3), pad='same')),
-        (MaxPool2DDNNLayer, dict(name='l2p', pool_size=3, stride=2)),
-
-        (DenseLayer, dict(name='l7', num_units=256)),
-        (FeaturePoolLayer, dict(name='l7p', pool_size=2)),
-        (DropoutLayer, dict(name='l7drop', p=0.5)),
-
-        (DenseLayer, dict(name='l8', num_units=256)),
-        (FeaturePoolLayer, dict(name='l8p', pool_size=2)),
-        (DropoutLayer, dict(name='l8drop', p=0.5)),
-
-        (DenseLayer, dict(name='out', num_units=10, nonlinearity=nonlinearities.softmax)),
-    ],
-
-    regression=False,
-    objective_loss_function=objectives.categorical_crossentropy,
-
-    update=updates.adam,
-    update_learning_rate=1e-3,
-
-    batch_iterator_train=train_iterator,
-    batch_iterator_test=test_iterator,
-
-    on_epoch_finished=[
-        save_weights,
-        save_training_history,
-        plot_training_history,
-        early_stopping
-    ],
-
-    verbose=10,
-    max_epochs=100
-)
 
 if __name__ == '__main__':
-    X_train, X_test, y_train, y_test = load_data(test_size=0.25, random_state=42)
+    parser = argparse.ArgumentParser()
+    args = parser.parse_args()
+
+    print
+    print '-----------------------------'
+    print 'Load data'
+    print '-----------------------------'
+    dataset = MNIST()
+    X_train = dataset.X_train
+    y_train = dataset.y_train
+    X_test = dataset.X_test
+    y_test = dataset.y_test
+
+    print
+    print '-----------------------------'
+    print 'Load model'
+    print '-----------------------------'
+    model = get_model('mnist_model')
+
+    layers = model.get_layers()
+    train_iterator, test_iterator = model.get_iterators()
+    net = model.get_net(layers, train_iterator, test_iterator)
+
+    X_train, X_valid, y_train, y_valid = net.train_split(X_train, y_train, net)
+    print X_train.shape, X_train.dtype, y_train.shape, y_train.dtype
+    print X_valid.shape, X_valid.dtype, y_valid.shape, y_valid.dtype
+    print X_test.shape, X_test.dtype, y_test.shape, y_test.dtype
+
+    print 'Compiling model'
+    net.initialize()
+
+    print
+    print '-----------------------------'
+    print 'Start training'
+    print '-----------------------------'
     net.fit(X_train, y_train)
 
-    # Load the best weights from pickled model
-    net.load_params_from('./examples/mnist/model_weights.pkl')
+    print 'Loading weights from', model.model_weights_fname
+    net.load_params_from(model.model_weights_fname)
 
-    score = net.score(X_test, y_test)
-    print 'Final score %.4f' % score
+    y_train_pred_proba = net.predict_proba(X_train)
+    y_valid_pred_proba = net.predict_proba(X_valid)
+    y_test_pred_proba = net.predict_proba(X_test)
+
+    y_train_pred = y_train_pred_proba.argmax(axis=1)
+    y_valid_pred = y_valid_pred_proba.argmax(axis=1)
+    y_test_pred = y_test_pred_proba.argmax(axis=1)
+
+    print
+    print '-----------------------------'
+    print 'Evaluation'
+    print '-----------------------------'
+    print 'Log loss'
+    print 'train', log_loss(y_train, y_train_pred_proba)
+    print 'valid', log_loss(y_valid, y_valid_pred_proba)
+    print 'test', log_loss(y_test, y_test_pred_proba)
+    print
+    print 'Accuracy'
+    print 'train', accuracy_score(y_train, y_train_pred)
+    print 'valid', accuracy_score(y_valid, y_valid_pred)
+    print 'test', accuracy_score(y_test, y_test_pred)
