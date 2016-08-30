@@ -354,15 +354,17 @@ class AdjustGammaBatchIteratorMixin(object):
 
     def transform(self, Xb, yb):
         Xb, yb = super(AdjustGammaBatchIteratorMixin, self).transform(Xb, yb)
-        Xb_transformed = Xb.copy()
 
         if self.adjust_gamma_p > 0:
+            Xb_transformed = Xb.copy()
             random_idx = get_random_idx(Xb, self.adjust_gamma_p)
             for i in random_idx:
                 gamma = choice(self.adjust_gamma_chocies)
                 Xb_transformed[i] = adjust_gamma(
                     Xb[i].transpose(1, 2, 0), gamma=gamma
                 ).transpose(2, 0, 1)
+        else:
+            Xb_transformed = Xb
 
         return Xb_transformed, yb
 
