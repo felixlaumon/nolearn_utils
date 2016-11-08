@@ -166,14 +166,18 @@ class AffineTransformBatchIteratorMixin(object):
     """
     def __init__(self, affine_p,
                  affine_scale_choices=[1.], affine_translation_choices=[0.],
+                 affine_translation_x_choices=None, affine_translation_y_choices=None,
                  affine_rotation_choices=[0.], affine_shear_choices=[0.],
                  affine_transform_bbox=False,
                  *args, **kwargs):
         super(AffineTransformBatchIteratorMixin,
               self).__init__(*args, **kwargs)
+        assert (affine_translation_x_choices is None and affine_translation_y_choices is None) != (affine_translation_choices is None)
         self.affine_p = affine_p
         self.affine_scale_choices = affine_scale_choices
         self.affine_translation_choices = affine_translation_choices
+        self.affine_translation_x_choices = affine_translation_x_choices
+        self.affine_translation_y_choices = affine_translation_y_choices
         self.affine_rotation_choices = affine_rotation_choices
         self.affine_shear_choices = affine_shear_choices
 
@@ -199,8 +203,12 @@ class AffineTransformBatchIteratorMixin(object):
             scale = choice(self.affine_scale_choices)
             rotation = choice(self.affine_rotation_choices)
             shear = choice(self.affine_shear_choices)
-            translation_y = choice(self.affine_translation_choices)
-            translation_x = choice(self.affine_translation_choices)
+            
+            affine_translation_y_choices = self.affine_translation_choices if self.affine_translation_y_choices is None else self.affine_translation_y_choices
+            affine_translation_x_choices = self.affine_translation_choices if self.affine_translation_x_choices is None else self.affine_translation_x_choices
+            
+            translation_y = choice(affine_translation_y_choices)
+            translation_x = choice(affine_translation_x_choices)
             img_transformed, tform = im_affine_transform(
                 Xb[i], return_tform=True,
                 scale=scale, rotation=rotation,
