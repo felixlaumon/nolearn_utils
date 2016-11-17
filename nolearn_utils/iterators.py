@@ -4,7 +4,10 @@ from __future__ import print_function
 import sys
 import os
 
-import Queue
+try:
+    from Queue import Queue
+except ImportError:
+    from queue import Queue
 import threading
 import random
 import time
@@ -430,7 +433,7 @@ def make_buffer_for_iterator(source_gen, buffer_size=2):
     if buffer_size < 2:
         raise RuntimeError("Minimal buffer size is 2!")
 
-    buffer = Queue.Queue(maxsize=buffer_size - 1)
+    buffer = Queue(maxsize=buffer_size - 1)
     # the effective buffer size is one less, because the generation process
     # will generate one extra element and block until there is room in the buffer.
 
@@ -449,7 +452,7 @@ def make_buffer_for_iterator(source_gen, buffer_size=2):
 
 def make_buffer_for_iterator_with_thread(gen, n_workers, buffer_size):
     wait_time = 0.02
-    generator_queue = Queue.Queue()
+    generator_queue = Queue()
     _stop = threading.Event()
 
     def generator_task():
@@ -460,7 +463,7 @@ def make_buffer_for_iterator_with_thread(gen, n_workers, buffer_size):
                     generator_queue.put(generator_output)
                 else:
                     time.sleep(wait_time)
-            except (StopIteration, KeyboardInterrupt), e:
+            except (StopIteration, KeyboardInterrupt) as e:
                 _stop.set()
                 return
 
