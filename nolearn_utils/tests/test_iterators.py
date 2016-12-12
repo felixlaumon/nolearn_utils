@@ -1,7 +1,7 @@
 import numpy as np
 import os
 import pytest
-from skimage.data import lena as get_lena
+from skimage.data import coffee as get_coffee
 from skimage.io import imsave
 from tempfile import mkstemp
 
@@ -19,11 +19,11 @@ def y():
 
 
 @pytest.fixture
-def lena_tmp_paths(n=100):
+def coffee_tmp_paths(n=100):
     paths = []
     for i in xrange(10):
         _, fname = mkstemp(suffix='.png')
-        imsave(fname, get_lena())
+        imsave(fname, get_coffee())
         paths.append(fname)
     return np.asarray(paths)
 
@@ -84,13 +84,15 @@ def test_random_crop_batch_iterator(X, y):
 def test_random_flip_batch_iterator(X, y):
     from nolearn_utils.iterators import RandomFlipBatchIteratorMixin
     Iterator = make_iterator('Iterator', [RandomFlipBatchIteratorMixin])
-    iterator = Iterator(batch_size=128, flip_horizontal_p=0.5, flip_vertical_p=0.5)
+    iterator = Iterator(
+        batch_size=128, flip_horizontal_p=0.5, flip_vertical_p=0.5
+    )
 
     for Xb, yb in iterator(X, y):
         pass
 
 
-def test_read_image_batch_iterator(lena_tmp_paths, y):
+def test_read_image_batch_iterator(coffee_tmp_paths, y):
     # TODO simple smoke test
     from nolearn_utils.iterators import ReadImageBatchIteratorMixin
 
@@ -99,10 +101,10 @@ def test_read_image_batch_iterator(lena_tmp_paths, y):
 
     iterator = Iterator(batch_size=128, read_image_size=(30, 30))
 
-    for Xb, yb in iterator(lena_tmp_paths, y):
+    for Xb, yb in iterator(coffee_tmp_paths, y):
         pass
 
-    [os.remove(path) for path in lena_tmp_paths]
+    [os.remove(path) for path in coffee_tmp_paths]
 
 
 def test_mean_subtraction_batch_iterator(X, y):
