@@ -2,7 +2,7 @@ import os
 from setuptools import find_packages
 from setuptools import setup
 
-version = '0.2dev'
+version = '0.2'
 
 here = os.path.abspath(os.path.dirname(__file__))
 try:
@@ -45,7 +45,7 @@ setup(
     keywords="",
     author="Felix Lau",
     author_email="felixlaumon@gmail.com",
-    url="https://github.com/felixlaumon/nolearn-utils",
+    url="https://github.com/4Catalyzer/nolearn-utils",
     license="MIT",
     packages=find_packages(),
     include_package_data=True,
