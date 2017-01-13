@@ -1,7 +1,7 @@
 import numpy as np
 import os
 import pytest
-from skimage.data import lena as get_lena
+from skimage.data import astronaut as get_lena
 from skimage.io import imsave
 from tempfile import mkstemp
 

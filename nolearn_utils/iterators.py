@@ -1,12 +1,10 @@
 from __future__ import division
 from __future__ import print_function
 
-import sys
 import os
-
 import Queue
+import sys
 import threading
-import random
 import time
 
 import numpy as np
@@ -203,10 +201,10 @@ class AffineTransformBatchIteratorMixin(object):
             scale = choice(self.affine_scale_choices)
             rotation = choice(self.affine_rotation_choices)
             shear = choice(self.affine_shear_choices)
-            
+
             affine_translation_y_choices = self.affine_translation_choices if self.affine_translation_y_choices is None else self.affine_translation_y_choices
             affine_translation_x_choices = self.affine_translation_choices if self.affine_translation_x_choices is None else self.affine_translation_x_choices
-            
+
             translation_y = choice(affine_translation_y_choices)
             translation_x = choice(affine_translation_x_choices)
             img_transformed, tform = im_affine_transform(

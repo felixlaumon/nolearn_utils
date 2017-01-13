@@ -12,6 +12,12 @@ except IOError:
     README = CHANGES = ''
 
 install_requires = [
+    'joblib',
+    'numpy',
+    'scikit-image',
+]
+
+examples_require = [
     'nolearn',
     'Lasagne'
 ]
@@ -48,5 +54,6 @@ setup(
     extras_require={
         'testing': tests_require,
         'docs': docs_require,
+        'examples': examples_require
     },
 )
