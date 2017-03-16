@@ -166,7 +166,7 @@ class AffineTransformBatchIteratorMixin(object):
                  affine_scale_choices=[1.], affine_translation_choices=[0.],
                  affine_translation_x_choices=None, affine_translation_y_choices=None,
                  affine_rotation_choices=[0.], affine_shear_choices=[0.],
-                 affine_transform_bbox=False,
+                 center_rel=0.5,
                  *args, **kwargs):
         super(AffineTransformBatchIteratorMixin,
               self).__init__(*args, **kwargs)
@@ -178,6 +178,7 @@ class AffineTransformBatchIteratorMixin(object):
         self.affine_translation_y_choices = affine_translation_y_choices
         self.affine_rotation_choices = affine_rotation_choices
         self.affine_shear_choices = affine_shear_choices
+        self.center_rel = center_rel
 
         if self.verbose:
             print('Random transform probability: %.2f' % self.affine_p)
@@ -212,7 +213,8 @@ class AffineTransformBatchIteratorMixin(object):
                 scale=scale, rotation=rotation,
                 shear=shear,
                 translation_y=translation_y,
-                translation_x=translation_x
+                translation_x=translation_x,
+                center_rel=self.center_rel,
             )
             Xb_transformed[i] = img_transformed
 
@@ -492,7 +494,11 @@ def shuffle(*arrays):
     return [array[p] for array in arrays]
 
 
-def im_affine_transform(img, scale, rotation, shear, translation_y, translation_x, return_tform=False):
+def im_affine_transform(
+    img, scale, rotation, shear, translation_y, translation_x,
+    center_rel=0.5,
+    return_tform=False
+):
     # Assumed img in c01. Convert to 01c for skimage
     img = img.transpose(1, 2, 0)
     # Normalize so that the param acts more like im_rotate, im_translate etc
@@ -501,7 +507,7 @@ def im_affine_transform(img, scale, rotation, shear, translation_y, translation_
     translation_y = - translation_y
 
     # shift to center first so that image is rotated around center
-    center_shift = np.array((img.shape[0], img.shape[1])) / 2. - 0.5
+    center_shift = np.array((img.shape[0], img.shape[1])) * center_rel - 0.5
     tform_center = SimilarityTransform(translation=-center_shift)
     tform_uncenter = SimilarityTransform(translation=center_shift)
 
