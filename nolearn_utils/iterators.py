@@ -2,7 +2,7 @@ from __future__ import division
 from __future__ import print_function
 
 import os
-import Queue
+from six.moves.queue import Queue
 import sys
 import threading
 import time
@@ -470,7 +470,7 @@ def make_buffer_for_iterator_with_thread(gen, n_workers, buffer_size):
                     generator_queue.put(generator_output)
                 else:
                     time.sleep(wait_time)
-            except (StopIteration, KeyboardInterrupt), e:
+            except (StopIteration, KeyboardInterrupt):
                 _stop.set()
                 return
 
