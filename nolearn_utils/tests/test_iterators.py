@@ -3,6 +3,8 @@ import os
 import pytest
 from skimage.data import astronaut as get_lena
 from skimage.io import imsave
+from six.moves import xrange
+import six
 from tempfile import mkstemp
 
 from nolearn_utils.iterators import BaseBatchIterator, make_iterator
@@ -47,7 +49,7 @@ def test_shuffle_batch_iterator(X, y):
 
     iterator = Iterator(batch_size=128)
     np.random.seed(42)  # Deterministic tests
-    Xb, yb = iter(iterator(X, y)).next()
+    Xb, yb = six.next(iter(iterator(X, y)))
     assert np.all(Xb != X[:128])
     assert np.all(yb != y[:128])
 

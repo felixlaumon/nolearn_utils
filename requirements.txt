@@ -20,6 +20,7 @@ python-dateutil==2.6.0    # via matplotlib
 pytz==2016.10             # via matplotlib
 scikit-image==0.12.3
 scikit-learn==0.18.1
-six==1.10.0               # via cycler, python-dateutil, scikit-image
+scipy==0.19.1
+six==1.10.0
 tabulate==0.7.7
 toolz==0.8.2              # via dask

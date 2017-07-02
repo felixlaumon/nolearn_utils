@@ -1,5 +1,5 @@
 import numpy as np
-import cPickle as pickle
+from six.moves import cPickle
 
 
 class EarlyStopping(object):
