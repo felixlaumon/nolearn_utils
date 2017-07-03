@@ -2,7 +2,7 @@ from __future__ import division
 from __future__ import print_function
 
 import os
-from six.moves.queue import Queue
+import queue
 import sys
 import threading
 import time
@@ -440,7 +440,7 @@ def make_buffer_for_iterator(source_gen, buffer_size=2):
     if buffer_size < 2:
         raise RuntimeError("Minimal buffer size is 2!")
 
-    buffer = Queue.Queue(maxsize=buffer_size - 1)
+    buffer = queue.Queue(maxsize=buffer_size - 1)
     # the effective buffer size is one less, because the generation process
     # will generate one extra element and block until there is room in the buffer.
 
@@ -459,7 +459,7 @@ def make_buffer_for_iterator(source_gen, buffer_size=2):
 
 def make_buffer_for_iterator_with_thread(gen, n_workers, buffer_size):
     wait_time = 0.02
-    generator_queue = Queue.Queue()
+    generator_queue = queue.Queue()
     _stop = threading.Event()
 
     def generator_task():
